@@ -1,0 +1,18 @@
+version: "3.9"
+
+services:
+  rust:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: sleep infinity
+    volumes:
+      - ..:/workspaces/rust
+    # This is where ports would go
+    networks:
+      - rust-network
+  # Additional services here
+# volumes here
+networks:
+  rust-network:
+    driver: bridge  

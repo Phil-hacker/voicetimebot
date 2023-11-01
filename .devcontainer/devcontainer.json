@@ -1,0 +1,24 @@
+{
+    "dockerComposeFile": "docker-compose.yml",
+    "service": "rust",
+    "workspaceFolder": "/workspaces/rust",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "editorconfig.editorconfig",
+                "github.github-vscode-theme",
+                "ms-azuretools.vscode-docker",
+                "ms-vscode.cpptools-extension-pack",
+                "redhat.vscode-yaml",
+                "rust-lang.rust-analyzer",
+                "tamasfe.even-better-toml",
+                "visualstudioexptteam.vscodeintellicode"
+            ]
+        }
+    },
+    "postCreateCommand": [
+        "sh",
+        ".devcontainer/update-paths.sh"
+    ]
+    // forwardPorts here
+}

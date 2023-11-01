@@ -7,6 +7,9 @@ use std::{
 
 use serenity::model::prelude::{ChannelId, GuildId, UserId};
 
+#[derive(Debug, Default, Hash, PartialEq, PartialOrd, Ord, Eq, Clone, Copy)]
+pub struct Seconds(u64);
+
 pub struct VoiceState {
     time: Instant,
     channel: ChannelId,
@@ -15,19 +18,19 @@ pub struct VoiceState {
 
 pub struct Db {
     excluded_users: HashSet<UserId>,
-    voice_times: HashMap<UserId, HashMap<(GuildId, ChannelId), Duration>>,
+    voice_times: HashMap<UserId, HashMap<(GuildId, ChannelId), Seconds>>,
     voice_states: HashMap<UserId, VoiceState>,
 }
 
 impl Db {
-    pub fn new(excluded_users: HashSet<UserId>) -> Self {
+    fn new(excluded_users: HashSet<UserId>) -> Self {
         Self {
             excluded_users,
             voice_times: HashMap::default(),
             voice_states: HashMap::default(),
         }
     }
-    pub fn add_time_to_user(
+    fn add_time_to_user(
         &mut self,
         user_id: UserId,
         guild_id: GuildId,
@@ -42,11 +45,11 @@ impl Db {
             .get(&(guild_id, channel_id))
             .map(|v| *v)
             .unwrap_or_default();
-        user_time += duration;
+        user_time.0 += duration.as_secs();
         println!("{}|{}|{:?}", user_id, channel_id, user_time);
         user_time_map.insert((guild_id, channel_id), user_time);
     }
-    pub fn handle_voicestate(&mut self, user_id: UserId, voicestate: Option<VoiceState>) {
+    fn handle_voicestate(&mut self, user_id: UserId, voicestate: Option<VoiceState>) {
         let voicestate = if let Some(voicestate) = voicestate {
             self.voice_states.insert(user_id, voicestate)
         } else {
@@ -61,7 +64,7 @@ impl Db {
             );
         }
     }
-    pub fn handle_message(&mut self, message: DbMessage) {
+    fn handle_message(&mut self, message: DbMessage) {
         match message {
             DbMessage::AddUserToOptOut { user_id } => {
                 self.excluded_users.insert(user_id);

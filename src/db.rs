@@ -98,7 +98,13 @@ impl Db {
         println!("{}|{}|{:?}", user_id, channel_id, user_time);
         user_time_map.insert((guild_id, channel_id), user_time);
     }
+    fn is_excluded_user(&self, user_id: &UserId) -> bool {
+        self.excluded_users.contains(&user_id)
+    }
     fn handle_voicestate(&mut self, user_id: UserId, voicestate: Option<VoiceState>) {
+        if self.is_excluded_user(&user_id) {
+            return;
+        }
         let voicestate = if let Some(voicestate) = voicestate {
             self.voice_states.insert(user_id, voicestate)
         } else {

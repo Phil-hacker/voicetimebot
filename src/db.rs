@@ -23,13 +23,62 @@ pub struct Db {
 }
 
 impl Db {
-    fn new(excluded_users: HashSet<UserId>) -> Self {
+    /// Creates a new empty [Db]
+    fn new() -> Self {
         Self {
-            excluded_users,
+            excluded_users: HashSet::default(),
             voice_times: HashMap::default(),
             voice_states: HashMap::default(),
         }
     }
+    /// Writes the [Db] to a [Writer][Write]
+    /// Returns an [error][std::io::Error] if writing failed
+    fn to_bytes(&self, writer: &mut dyn Write) -> Result<(), std::io::Error> {
+        writer.write_all(&(self.excluded_users.len() as u64).to_le_bytes())?;
+        for user in self.excluded_users.iter() {
+            writer.write_all(&user.0.to_le_bytes())?;
+        }
+        writer.write_all(&(self.voice_times.len() as u64).to_le_bytes())?;
+        for (user, times) in self.voice_times.iter() {
+            writer.write_all(&user.0.to_le_bytes())?;
+            writer.write_all(&times.len().to_le_bytes())?;
+            for ((guild, channel), time) in times.iter() {
+                writer.write_all(&guild.0.to_le_bytes())?;
+                writer.write_all(&channel.0.to_le_bytes())?;
+                writer.write_all(&time.0.to_le_bytes())?;
+            }
+        }
+        writer.flush()
+    }
+    /// Reads the [Db] from a [Reader][Read]
+    /// Returns an [error][std::io::Error] if writing failed
+    fn from_bytes(reader: &mut dyn Read) -> Result<Db, std::io::Error> {
+        let mut db = Self::new();
+        let len = read_u64(reader)?;
+        for _ in 0..len {
+            let user = UserId({
+                let mut buffer = [0u8; 8];
+                reader.read_exact(&mut buffer)?;
+                u64::from_le_bytes(buffer)
+            });
+            db.excluded_users.insert(user);
+        }
+        let len = read_u64(reader)?;
+        for _ in 0..len {
+            let user_id = UserId(read_u64(reader)?);
+            let len = read_u64(reader)?;
+            let mut user_times = HashMap::default();
+            for _ in 0..len {
+                user_times.insert(
+                    (GuildId(read_u64(reader)?), ChannelId(read_u64(reader)?)),
+                    Seconds(read_u64(reader)?),
+                );
+            }
+            db.voice_times.insert(user_id, user_times);
+        }
+        Ok(db)
+    }
+
     fn add_time_to_user(
         &mut self,
         user_id: UserId,

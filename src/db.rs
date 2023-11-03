@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    io::{Read, Write},
     sync::{mpsc::Sender, Arc, Mutex},
     thread::{self, JoinHandle},
     time::{Duration, Instant},
@@ -56,11 +57,7 @@ impl Db {
         let mut db = Self::new();
         let len = read_u64(reader)?;
         for _ in 0..len {
-            let user = UserId({
-                let mut buffer = [0u8; 8];
-                reader.read_exact(&mut buffer)?;
-                u64::from_le_bytes(buffer)
-            });
+            let user = UserId(read_u64(reader)?);
             db.excluded_users.insert(user);
         }
         let len = read_u64(reader)?;
@@ -160,7 +157,7 @@ pub struct DbManager {
 
 impl DbManager {
     pub fn new(excluded_users: HashSet<UserId>) -> Self {
-        let db: Arc<Mutex<Db>> = Arc::new(Mutex::new(Db::new(excluded_users)));
+        let db: Arc<Mutex<Db>> = Arc::new(Mutex::new(Db::new()));
         let db_cloned = db.clone();
         let (db_channel, read_channel) = std::sync::mpsc::channel();
         let _db_thread = thread::spawn(move || {
@@ -224,4 +221,10 @@ enum DbMessage {
         guild_id: Option<GuildId>,
         time: Instant,
     },
+}
+
+fn read_u64(reader: &mut dyn Read) -> Result<u64, std::io::Error> {
+    let mut buffer = [0u8; 8];
+    reader.read_exact(&mut buffer)?;
+    Ok(u64::from_le_bytes(buffer))
 }

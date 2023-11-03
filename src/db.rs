@@ -153,7 +153,7 @@ pub struct DbManager {
 }
 
 impl DbManager {
-    pub fn new(excluded_users: HashSet<UserId>) -> Self {
+    pub fn new() -> Self {
         let db: Arc<Mutex<Db>> = Arc::new(Mutex::new(Db::new()));
         let db_cloned = db.clone();
         let (db_channel, read_channel) = std::sync::mpsc::channel();

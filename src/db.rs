@@ -147,6 +147,7 @@ impl Db {
             DbMessage::SaveDb { path } => {
                 let mut file = File::create(&path).unwrap();
                 self.to_bytes(&mut file).unwrap();
+                println!("Saved DB");
             }
         }
     }

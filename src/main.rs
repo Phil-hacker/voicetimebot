@@ -1,4 +1,4 @@
-use std::{env, sync::Arc, thread};
+use std::{env, path::PathBuf, sync::Arc, thread};
 
 use db::DbManager;
 
@@ -10,7 +10,13 @@ async fn main() {
     dotenv::dotenv().ok();
     // Configure the client with your Discord bot token in the environment.
     let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
-    let db: Arc<DbManager> = DbManager::new().into();
+    let db: Arc<DbManager> = {
+        match env::var("DB_PATH") {
+            Ok(path) => DbManager::open(PathBuf::from(path)).expect("Couldn't open DB"),
+            Err(_) => DbManager::new(),
+        }
+    }
+    .into();
     let db1 = db.clone();
     thread::spawn(move || loop {
         std::io::stdin().read_line(&mut String::new()).unwrap();

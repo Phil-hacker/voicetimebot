@@ -77,7 +77,17 @@ impl Db {
         }
         Ok(db)
     }
-
+    fn get_time(&self, user: UserId, guild: GuildId) -> Seconds {
+        match self.voice_times.get(&user) {
+            Some(data) => Seconds(
+                data.iter()
+                    .filter(|v| v.0 .0 == guild)
+                    .map(|v| v.1 .0)
+                    .sum(),
+            ),
+            None => Seconds(0),
+        }
+    }
     fn add_time_to_user(
         &mut self,
         user_id: UserId,

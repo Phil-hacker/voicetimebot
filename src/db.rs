@@ -1,6 +1,8 @@
 use std::{
     collections::{HashMap, HashSet},
+    fs::File,
     io::{Read, Write},
+    path::PathBuf,
     sync::{mpsc::Sender, Arc, Mutex},
     thread::{self, JoinHandle},
     time::{Duration, Instant},
@@ -142,6 +144,10 @@ impl Db {
                 };
                 self.handle_voicestate(user_id, voicestate);
             }
+            DbMessage::SaveDb { path } => {
+                let mut file = File::create(&path).unwrap();
+                self.to_bytes(&mut file).unwrap();
+            }
         }
     }
 }
@@ -168,6 +174,9 @@ impl DbManager {
             _db_thread,
             db_channel,
         }
+    }
+    pub fn save_db(&self, path: PathBuf) {
+        self.db_channel.send(DbMessage::SaveDb { path }).unwrap();
     }
     pub fn add_excluded_user(&self, user_id: UserId) {
         self.db_channel
@@ -208,6 +217,9 @@ enum DbMessage {
         channel_id: Option<ChannelId>,
         guild_id: Option<GuildId>,
         time: Instant,
+    },
+    SaveDb {
+        path: PathBuf,
     },
 }
 

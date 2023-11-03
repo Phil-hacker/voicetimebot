@@ -159,8 +159,8 @@ pub struct DbManager {
 }
 
 impl DbManager {
-    pub fn new() -> Self {
-        let db: Arc<Mutex<Db>> = Arc::new(Mutex::new(Db::new()));
+    fn from_db(db: Db) -> Self {
+        let db: Arc<Mutex<Db>> = Arc::new(Mutex::new(db));
         let db_cloned = db.clone();
         let (db_channel, read_channel) = std::sync::mpsc::channel();
         let _db_thread = thread::spawn(move || {
@@ -174,6 +174,13 @@ impl DbManager {
             _db_thread,
             db_channel,
         }
+    }
+    pub fn open(path: PathBuf) -> Result<Self, std::io::Error> {
+        let mut file = File::open(path)?;
+        Ok(Self::from_db(Db::from_bytes(&mut file)?))
+    }
+    pub fn new() -> Self {
+        Self::from_db(Db::new())
     }
     pub fn save_db(&self, path: PathBuf) {
         self.db_channel.send(DbMessage::SaveDb { path }).unwrap();

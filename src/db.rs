@@ -121,9 +121,6 @@ impl Db {
             DbMessage::AddUserToOptOut { user_id } => {
                 self.excluded_users.insert(user_id);
             }
-            DbMessage::IsUserOptOut { user_id, callback } => {
-                callback(self.excluded_users.contains(&user_id));
-            }
             DbMessage::RemoverUserToOptOut { user_id } => {
                 self.excluded_users.remove(&user_id);
             }
@@ -182,11 +179,6 @@ impl DbManager {
             .send(DbMessage::RemoverUserToOptOut { user_id })
             .unwrap();
     }
-    pub fn is_excluded_user(&self, user_id: UserId, callback: fn(bool) -> ()) {
-        self.db_channel
-            .send(DbMessage::IsUserOptOut { user_id, callback })
-            .unwrap();
-    }
     pub fn update_voicestate(
         &self,
         user_id: UserId,
@@ -207,10 +199,6 @@ impl DbManager {
 enum DbMessage {
     AddUserToOptOut {
         user_id: UserId,
-    },
-    IsUserOptOut {
-        user_id: UserId,
-        callback: fn(bool) -> (),
     },
     RemoverUserToOptOut {
         user_id: UserId,

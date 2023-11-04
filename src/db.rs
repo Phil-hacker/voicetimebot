@@ -1,3 +1,11 @@
+use serenity::{
+    http::Http,
+    model::prelude::{
+        application_command::ApplicationCommandInteraction, command::Command, ChannelId, GuildId,
+        InteractionApplicationCommandCallbackDataFlags, MessageFlags, UserId,
+    },
+    utils::MessageBuilder,
+};
 use std::{
     collections::{HashMap, HashSet},
     fs::File,
@@ -7,8 +15,7 @@ use std::{
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
-
-use serenity::model::prelude::{ChannelId, GuildId, UserId};
+use tokio::runtime::Runtime;
 
 #[derive(Debug, Default, Hash, PartialEq, PartialOrd, Ord, Eq, Clone, Copy)]
 pub struct Seconds(u64);
@@ -77,11 +84,11 @@ impl Db {
         }
         Ok(db)
     }
-    fn get_time(&self, user: UserId, guild: GuildId) -> Seconds {
+    fn get_time(&self, user: UserId, guild: GuildId, channel_id: Option<ChannelId>) -> Seconds {
         match self.voice_times.get(&user) {
             Some(data) => Seconds(
                 data.iter()
-                    .filter(|v| v.0 .0 == guild)
+                    .filter(|v| v.0 .0 == guild && channel_id.map(|c| c == v.0 .1).unwrap_or(true))
                     .map(|v| v.1 .0)
                     .sum(),
             ),
@@ -128,7 +135,7 @@ impl Db {
             );
         }
     }
-    fn handle_message(&mut self, message: DbMessage) {
+    fn handle_message(&mut self, message: DbMessage, tokio: &mut Runtime) {
         match message {
             DbMessage::AddUserToOptOut { user_id } => {
                 self.excluded_users.insert(user_id);
@@ -159,6 +166,22 @@ impl Db {
                 self.to_bytes(&mut file).unwrap();
                 println!("Saved DB");
             }
+            DbMessage::GetTime {
+                user_id,
+                guild_id,
+                channel_id,
+                http,
+                command,
+            } => {
+                tokio.spawn(send_time_message(
+                    user_id,
+                    guild_id,
+                    channel_id,
+                    http,
+                    command,
+                    self.get_time(user_id, guild_id, channel_id),
+                ));
+            }
         }
     }
 }
@@ -175,9 +198,10 @@ impl DbManager {
         let db_cloned = db.clone();
         let (db_channel, read_channel) = std::sync::mpsc::channel();
         let _db_thread = thread::spawn(move || {
+            let mut tokio = tokio::runtime::Runtime::new().unwrap();
             let mut db = db_cloned.lock().unwrap();
             while let Ok(message) = read_channel.recv() {
-                db.handle_message(message)
+                db.handle_message(message, &mut tokio)
             }
         });
         Self {
@@ -195,6 +219,24 @@ impl DbManager {
     }
     pub fn save_db(&self, path: PathBuf) {
         self.db_channel.send(DbMessage::SaveDb { path }).unwrap();
+    }
+    pub fn get_time(
+        &self,
+        user_id: UserId,
+        guild_id: GuildId,
+        channel_id: Option<ChannelId>,
+        http: Arc<Http>,
+        command: ApplicationCommandInteraction,
+    ) {
+        self.db_channel
+            .send(DbMessage::GetTime {
+                user_id,
+                guild_id,
+                channel_id,
+                http,
+                command,
+            })
+            .unwrap()
     }
     pub fn add_excluded_user(&self, user_id: UserId) {
         self.db_channel
@@ -239,10 +281,47 @@ enum DbMessage {
     SaveDb {
         path: PathBuf,
     },
+    GetTime {
+        user_id: UserId,
+        guild_id: GuildId,
+        channel_id: Option<ChannelId>,
+        http: Arc<Http>,
+        command: ApplicationCommandInteraction,
+    },
 }
 
 fn read_u64(reader: &mut dyn Read) -> Result<u64, std::io::Error> {
     let mut buffer = [0u8; 8];
     reader.read_exact(&mut buffer)?;
     Ok(u64::from_le_bytes(buffer))
+}
+
+async fn send_time_message(
+    user_id: UserId,
+    guild_id: GuildId,
+    channel_id: Option<ChannelId>,
+    http: Arc<Http>,
+    command: ApplicationCommandInteraction,
+    time: Seconds,
+) {
+    let time = humantime::format_duration(Duration::from_secs(time.0)).to_string();
+    let mut msg = MessageBuilder::new();
+    msg.push(format!("<@{}>", user_id.0))
+        .push(" war ")
+        .push(time);
+    let text = if let Some(channel) = channel_id {
+        msg.push(" in ").channel(channel).build()
+    } else {
+        msg.push(" in einem VC").build()
+    };
+    command
+        .create_interaction_response(&http, |interaction| {
+            interaction.interaction_response_data(|data| {
+                data.content(text).flags(unsafe {
+                    InteractionApplicationCommandCallbackDataFlags::from_bits_unchecked(1 << 12)
+                })
+            })
+        })
+        .await
+        .unwrap();
 }

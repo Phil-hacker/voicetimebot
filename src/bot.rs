@@ -1,13 +1,19 @@
 use std::sync::Arc;
 
 use serenity::async_trait;
+use serenity::http::Http;
+use serenity::model::channel;
 use serenity::model::gateway::Ready;
+use serenity::model::prelude::application_command::CommandDataOptionValue;
 use serenity::model::prelude::command::{Command, CommandType};
-use serenity::model::prelude::{Interaction, InteractionResponseType};
+use serenity::model::prelude::{
+    ChannelId, ChannelType, Interaction, InteractionResponseType, UserId,
+};
 use serenity::model::voice::VoiceState;
 use serenity::prelude::*;
+use serenity::utils::MessageBuilder;
 
-use crate::db::DbManager;
+use crate::db::{DbManager, Seconds};
 
 struct Handler {
     db: Arc<DbManager>,
@@ -37,6 +43,30 @@ impl EventHandler for Handler {
                 .kind(CommandType::ChatInput)
                 .dm_permission(false)
                 .description("Opt into voice chat data aggregation")
+        })
+        .await
+        .unwrap();
+        Command::create_global_application_command(&ctx.http, |command| {
+            command
+                .name("get_vc_time")
+                .kind(CommandType::ChatInput)
+                .dm_permission(false)
+                .description("Get VC time of a user")
+                .create_option(|option| {
+                    option
+                        .name("user")
+                        .description("User that should be queried")
+                        .required(true)
+                        .kind(serenity::model::prelude::command::CommandOptionType::User)
+                })
+                .create_option(|option| {
+                    option
+                        .name("channel")
+                        .description("Channel that should be queried")
+                        .kind(serenity::model::prelude::command::CommandOptionType::Channel)
+                        .channel_types(&[ChannelType::Voice])
+                        .required(false)
+                })
         })
         .await
         .unwrap();
@@ -79,6 +109,43 @@ impl EventHandler for Handler {
                         })
                         .await
                         .unwrap();
+                }
+                "get_vc_time" => {
+                    let args = &command.data.options;
+                    let channel = args
+                        .iter()
+                        .find(|v| v.name == "channel")
+                        .map(|v| {
+                            if let CommandDataOptionValue::Channel(channel) =
+                                v.resolved.as_ref().unwrap()
+                            {
+                                Some(channel.id)
+                            } else {
+                                None
+                            }
+                        })
+                        .flatten();
+                    let user = args
+                        .iter()
+                        .find(|v| v.name == "user")
+                        .map(|v| {
+                            if let CommandDataOptionValue::User(user, _) =
+                                v.resolved.as_ref().unwrap()
+                            {
+                                Some(user.id)
+                            } else {
+                                None
+                            }
+                        })
+                        .flatten()
+                        .unwrap();
+                    self.db.get_time(
+                        UserId(user.0),
+                        command.guild_id.unwrap(),
+                        channel,
+                        ctx.http,
+                        command,
+                    );
                 }
                 _ => {}
             },

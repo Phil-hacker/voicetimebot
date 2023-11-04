@@ -1,19 +1,14 @@
 use std::sync::Arc;
 
 use serenity::async_trait;
-use serenity::http::Http;
-use serenity::model::channel;
 use serenity::model::gateway::Ready;
 use serenity::model::prelude::application_command::CommandDataOptionValue;
 use serenity::model::prelude::command::{Command, CommandType};
-use serenity::model::prelude::{
-    ChannelId, ChannelType, Interaction, InteractionResponseType, UserId,
-};
+use serenity::model::prelude::{ChannelType, Interaction, InteractionResponseType, UserId};
 use serenity::model::voice::VoiceState;
 use serenity::prelude::*;
-use serenity::utils::MessageBuilder;
 
-use crate::db::{DbManager, Seconds};
+use crate::db::DbManager;
 
 struct Handler {
     db: Arc<DbManager>,
@@ -112,23 +107,19 @@ impl EventHandler for Handler {
                 }
                 "get_vc_time" => {
                     let args = &command.data.options;
-                    let channel = args
-                        .iter()
-                        .find(|v| v.name == "channel")
-                        .map(|v| {
-                            if let CommandDataOptionValue::Channel(channel) =
-                                v.resolved.as_ref().unwrap()
-                            {
-                                Some(channel.id)
-                            } else {
-                                None
-                            }
-                        })
-                        .flatten();
+                    let channel = args.iter().find(|v| v.name == "channel").and_then(|v| {
+                        if let CommandDataOptionValue::Channel(channel) =
+                            v.resolved.as_ref().unwrap()
+                        {
+                            Some(channel.id)
+                        } else {
+                            None
+                        }
+                    });
                     let user = args
                         .iter()
                         .find(|v| v.name == "user")
-                        .map(|v| {
+                        .and_then(|v| {
                             if let CommandDataOptionValue::User(user, _) =
                                 v.resolved.as_ref().unwrap()
                             {
@@ -137,7 +128,6 @@ impl EventHandler for Handler {
                                 None
                             }
                         })
-                        .flatten()
                         .unwrap();
                     self.db.get_time(
                         UserId(user.0),

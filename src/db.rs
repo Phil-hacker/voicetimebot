@@ -1,8 +1,8 @@
 use serenity::{
     http::Http,
     model::prelude::{
-        application_command::ApplicationCommandInteraction, command::Command, ChannelId, GuildId,
-        InteractionApplicationCommandCallbackDataFlags, MessageFlags, UserId,
+        application_command::ApplicationCommandInteraction, ChannelId, GuildId,
+        InteractionApplicationCommandCallbackDataFlags, UserId,
     },
     utils::MessageBuilder,
 };
@@ -102,20 +102,20 @@ impl Db {
         channel_id: ChannelId,
         duration: Duration,
     ) {
-        if !self.voice_times.contains_key(&user_id) {
-            self.voice_times.insert(user_id, HashMap::default());
-        }
+        self.voice_times
+            .entry(user_id)
+            .or_insert_with(HashMap::default);
         let user_time_map = self.voice_times.get_mut(&user_id).unwrap();
         let mut user_time = user_time_map
             .get(&(guild_id, channel_id))
-            .map(|v| *v)
+            .copied()
             .unwrap_or_default();
         user_time.0 += duration.as_secs();
         println!("{}|{}|{:?}", user_id, channel_id, user_time);
         user_time_map.insert((guild_id, channel_id), user_time);
     }
     fn is_excluded_user(&self, user_id: &UserId) -> bool {
-        self.excluded_users.contains(&user_id)
+        self.excluded_users.contains(user_id)
     }
     fn handle_voicestate(&mut self, user_id: UserId, voicestate: Option<VoiceState>) {
         if self.is_excluded_user(&user_id) {
@@ -162,7 +162,7 @@ impl Db {
                 self.handle_voicestate(user_id, voicestate);
             }
             DbMessage::SaveDb { path } => {
-                let mut file = File::create(&path).unwrap();
+                let mut file = File::create(path).unwrap();
                 self.to_bytes(&mut file).unwrap();
                 println!("Saved DB");
             }
@@ -298,7 +298,7 @@ fn read_u64(reader: &mut dyn Read) -> Result<u64, std::io::Error> {
 
 async fn send_time_message(
     user_id: UserId,
-    guild_id: GuildId,
+    _guild_id: GuildId,
     channel_id: Option<ChannelId>,
     http: Arc<Http>,
     command: ApplicationCommandInteraction,

@@ -26,6 +26,9 @@ pub struct VoiceState {
     guild: GuildId,
 }
 
+const SILENT_FLAG: InteractionApplicationCommandCallbackDataFlags =
+    unsafe { InteractionApplicationCommandCallbackDataFlags::from_bits_unchecked(1 << 12) };
+
 pub struct Db {
     excluded_users: HashSet<UserId>,
     voice_times: HashMap<UserId, HashMap<(GuildId, ChannelId), Seconds>>,
@@ -316,11 +319,11 @@ async fn send_time_message(
     };
     command
         .create_interaction_response(&http, |interaction| {
-            interaction.interaction_response_data(|data| {
-                data.content(text).flags(unsafe {
-                    InteractionApplicationCommandCallbackDataFlags::from_bits_unchecked(1 << 12)
-                })
-            })
+            interaction.interaction_response_data(|data| data.content(text).flags(SILENT_FLAG))
+        })
+        .await
+        .unwrap();
+}
         })
         .await
         .unwrap();

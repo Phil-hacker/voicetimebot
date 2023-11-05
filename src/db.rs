@@ -141,6 +141,17 @@ impl Db {
     fn is_excluded_user(&self, user_id: &UserId) -> bool {
         self.excluded_users.contains(user_id)
     }
+    fn shutdown(&mut self) {
+        let voice_states: Vec<_> = self.voice_states.drain().collect();
+        for (user_id, voice_state) in voice_states.into_iter() {
+            self.add_time_to_user(
+                UserId(user_id.0),
+                voice_state.guild,
+                voice_state.channel,
+                voice_state.time.elapsed(),
+            );
+        }
+    }
     fn handle_voicestate(&mut self, user_id: UserId, voicestate: Option<VoiceState>) {
         if self.is_excluded_user(&user_id) {
             return;
@@ -219,6 +230,13 @@ impl Db {
                     self.get_leaderboard(guild_id, channel_id),
                 ));
             }
+            DbMessage::StopAndSaveDb { path } => {
+                self.shutdown();
+                let mut file = File::create(path).unwrap();
+                self.to_bytes(&mut file).unwrap();
+                println!("Saved DB");
+                std::process::exit(0);
+            }
         }
     }
 }
@@ -256,6 +274,11 @@ impl DbManager {
     }
     pub fn save_db(&self, path: PathBuf) {
         self.db_channel.send(DbMessage::SaveDb { path }).unwrap();
+    }
+    pub fn stop_and_save_db(&self, path: PathBuf) {
+        self.db_channel
+            .send(DbMessage::StopAndSaveDb { path })
+            .unwrap();
     }
     pub fn get_time(
         &self,
@@ -332,6 +355,9 @@ enum DbMessage {
         time: Instant,
     },
     SaveDb {
+        path: PathBuf,
+    },
+    StopAndSaveDb {
         path: PathBuf,
     },
     GetTime {

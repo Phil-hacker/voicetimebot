@@ -65,6 +65,23 @@ impl EventHandler for Handler {
         })
         .await
         .unwrap();
+        Command::create_global_application_command(&ctx.http, |command| {
+            command
+                .name("leaderboard")
+                .kind(CommandType::ChatInput)
+                .dm_permission(false)
+                .description("Load the Leaderboard")
+                .create_option(|option| {
+                    option
+                        .name("channel")
+                        .description("Channel that the leaderboard should be for")
+                        .kind(serenity::model::prelude::command::CommandOptionType::Channel)
+                        .channel_types(&[ChannelType::Voice])
+                        .required(false)
+                })
+        })
+        .await
+        .unwrap();
         println!("{} is connected!", ready.user.name);
     }
     async fn voice_state_update(&self, _ctx: Context, new: VoiceState) {
@@ -136,6 +153,20 @@ impl EventHandler for Handler {
                         ctx.http,
                         command,
                     );
+                }
+                "leaderboard" => {
+                    let args = &command.data.options;
+                    let channel = args.iter().find(|v| v.name == "channel").and_then(|v| {
+                        if let CommandDataOptionValue::Channel(channel) =
+                            v.resolved.as_ref().unwrap()
+                        {
+                            Some(channel.id)
+                        } else {
+                            None
+                        }
+                    });
+                    self.db
+                        .get_leaderboard(command.guild_id.unwrap(), channel, ctx.http, command);
                 }
                 _ => {}
             },

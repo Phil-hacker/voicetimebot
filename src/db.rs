@@ -1,4 +1,5 @@
 use serenity::{
+    builder::CreateEmbed,
     http::Http,
     model::prelude::{
         application_command::ApplicationCommandInteraction, ChannelId, GuildId,
@@ -7,7 +8,7 @@ use serenity::{
     utils::MessageBuilder,
 };
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     fs::File,
     io::{Read, Write},
     path::PathBuf,
@@ -98,6 +99,28 @@ impl Db {
             None => Seconds(0),
         }
     }
+    fn get_leaderboard(
+        &self,
+        guild: GuildId,
+        channel_id: Option<ChannelId>,
+    ) -> Vec<(UserId, Seconds)> {
+        let mut leaderboard = Vec::new();
+        for (user, times) in self.voice_times.iter() {
+            let time = Seconds(
+                times
+                    .iter()
+                    .filter(|v| v.0 .0 == guild && channel_id.map(|c| c == v.0 .1).unwrap_or(true))
+                    .map(|v| v.1 .0)
+                    .sum(),
+            );
+            if time > Seconds(0) {
+                leaderboard.push((*user, time));
+            }
+        }
+        leaderboard.sort_unstable_by_key(|value| value.1);
+        leaderboard.reverse();
+        leaderboard
+    }
     fn add_time_to_user(
         &mut self,
         user_id: UserId,
@@ -185,6 +208,19 @@ impl Db {
                     self.get_time(user_id, guild_id, channel_id),
                 ));
             }
+            DbMessage::GetLeaderboard {
+                guild_id,
+                channel_id,
+                http,
+                command,
+            } => {
+                tokio.spawn(send_leaderboard_message(
+                    channel_id,
+                    http,
+                    command,
+                    self.get_leaderboard(guild_id, channel_id),
+                ));
+            }
         }
     }
 }
@@ -234,6 +270,22 @@ impl DbManager {
         self.db_channel
             .send(DbMessage::GetTime {
                 user_id,
+                guild_id,
+                channel_id,
+                http,
+                command,
+            })
+            .unwrap()
+    }
+    pub fn get_leaderboard(
+        &self,
+        guild_id: GuildId,
+        channel_id: Option<ChannelId>,
+        http: Arc<Http>,
+        command: ApplicationCommandInteraction,
+    ) {
+        self.db_channel
+            .send(DbMessage::GetLeaderboard {
                 guild_id,
                 channel_id,
                 http,
@@ -291,6 +343,12 @@ enum DbMessage {
         http: Arc<Http>,
         command: ApplicationCommandInteraction,
     },
+    GetLeaderboard {
+        guild_id: GuildId,
+        channel_id: Option<ChannelId>,
+        http: Arc<Http>,
+        command: ApplicationCommandInteraction,
+    },
 }
 
 fn read_u64(reader: &mut dyn Read) -> Result<u64, std::io::Error> {
@@ -324,6 +382,35 @@ async fn send_time_message(
         .await
         .unwrap();
 }
+
+async fn send_leaderboard_message(
+    channel_id: Option<ChannelId>,
+    http: Arc<Http>,
+    command: ApplicationCommandInteraction,
+    mut leaderboard: Vec<(UserId, Seconds)>,
+) {
+    let mut embed = CreateEmbed::default();
+    embed.title(format!(
+        "VC Leaderboard {}",
+        if let Some(channel_id) = channel_id {
+            format!("for <#{}>", channel_id)
+        } else {
+            String::new()
+        }
+    ));
+    let mut msg = MessageBuilder::new();
+    for (user, time) in leaderboard.iter().take(10) {
+        let time = humantime::format_duration(Duration::from_secs(time.0)).to_string();
+        msg.mention(user).push(": ").push(time).push("\n");
+    }
+    embed.description(msg.build());
+    command
+        .create_interaction_response(&http, |interaction| {
+            interaction.interaction_response_data(
+                |data: &mut serenity::builder::CreateInteractionResponseData<'_>| {
+                    data.add_embed(embed).flags(SILENT_FLAG)
+                },
+            )
         })
         .await
         .unwrap();

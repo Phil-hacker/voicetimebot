@@ -7,6 +7,8 @@ mod bot;
 mod control_server;
 mod db;
 
+const SAVE_INTERVALL: u64 = 600;
+
 #[tokio::main]
 async fn main() {
     dotenv::dotenv().ok();

@@ -4,9 +4,10 @@ use std::{
     path::PathBuf,
     sync::{mpsc, Arc},
     thread,
+    time::Instant,
 };
 
-use crate::db::DbManager;
+use crate::{db::DbManager, SAVE_INTERVALL};
 
 pub fn create_control_server(port: u16, db: Arc<DbManager>, db_path: &str) {
     let db_path = PathBuf::from(db_path);
@@ -20,11 +21,11 @@ pub fn create_control_server(port: u16, db: Arc<DbManager>, db_path: &str) {
         }
     });
     thread::spawn(move || {
+        let mut last_save = Instant::now();
         let mut connections = Vec::new();
         let mut buffer = [0u8; 1 << 16];
         loop {
             if let Ok(connection) = receiver.try_recv() {
-                println!("{}", connection.1);
                 if let Ok(_) = connection.0.set_nonblocking(true) {
                     connections.push(connection.0);
                 }
@@ -35,7 +36,6 @@ pub fn create_control_server(port: u16, db: Arc<DbManager>, db_path: &str) {
                         continue;
                     }
                     if let Ok(command) = std::str::from_utf8(&buffer[0..size]).map(|v| v.trim()) {
-                        println!("{command}");
                         match command {
                             "save" => db.save_db(db_path.clone()),
                             "stop" => db.stop_and_save_db(db_path.clone()),
@@ -43,6 +43,10 @@ pub fn create_control_server(port: u16, db: Arc<DbManager>, db_path: &str) {
                         }
                     }
                 }
+            }
+            if last_save.elapsed().as_secs() > SAVE_INTERVALL {
+                last_save = Instant::now();
+                db.save_db(db_path.clone());
             }
         }
     });

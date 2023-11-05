@@ -8,7 +8,7 @@ use serenity::{
     utils::MessageBuilder,
 };
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     fs::File,
     io::{Read, Write},
     path::PathBuf,
@@ -128,9 +128,7 @@ impl Db {
         channel_id: ChannelId,
         duration: Duration,
     ) {
-        self.voice_times
-            .entry(user_id)
-            .or_insert_with(HashMap::default);
+        self.voice_times.entry(user_id).or_default();
         let user_time_map = self.voice_times.get_mut(&user_id).unwrap();
         let mut user_time = user_time_map
             .get(&(guild_id, channel_id))
@@ -387,7 +385,7 @@ async fn send_leaderboard_message(
     channel_id: Option<ChannelId>,
     http: Arc<Http>,
     command: ApplicationCommandInteraction,
-    mut leaderboard: Vec<(UserId, Seconds)>,
+    leaderboard: Vec<(UserId, Seconds)>,
 ) {
     let mut embed = CreateEmbed::default();
     embed.title(format!(
